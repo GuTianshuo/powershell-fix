@@ -221,3 +221,38 @@ test("on powershell51 a bare && chain IS fixed (host-engine semantics)", () => {
   const r = fix("a && b", WIN51);
   assert.equal(r.changed, true);
 });
+
+// ── 原生程序多行参数 / here-string 插值(实际踩过的坑) ────────────────
+
+test("NATIVE_MULTILINE_ARG: multi-line argument to a native program warns", () => {
+  const r = fix('git commit -m "fix: subject\n\nbody line"', WIN51);
+  assert.ok(
+    r.warnings.some((w) => w.rule === "NATIVE_MULTILINE_ARG"),
+    "PowerShell 5.1 re-tokenizes this and git sees a pathspec",
+  );
+});
+
+test("NATIVE_MULTILINE_ARG: single-line quoted argument does not warn", () => {
+  const r = fix('git commit -m "one line"', WIN51);
+  assert.ok(!r.warnings.some((w) => w.rule === "NATIVE_MULTILINE_ARG"));
+});
+
+test("NATIVE_MULTILINE_ARG: a cmdlet taking a multi-line value does not warn", () => {
+  const r = fix('Set-Content -Path a.txt -Value "x\ny"', WIN51);
+  assert.ok(!r.warnings.some((w) => w.rule === "NATIVE_MULTILINE_ARG"));
+});
+
+test("NATIVE_MULTILINE_ARG: here-strings are left to HERESTRING_*", () => {
+  const r = fix('node -e @"\nconsole.log(1)\n"@', WIN51);
+  assert.ok(!r.warnings.some((w) => w.rule === "NATIVE_MULTILINE_ARG"));
+});
+
+test("HERESTRING_DOLLAR: interpolating here-string warns", () => {
+  const r = fix('Set-Content -Path a.txt -Value @"\nHello $name\n"@', WIN51);
+  assert.ok(r.warnings.some((w) => w.rule === "HERESTRING_DOLLAR"));
+});
+
+test("HERESTRING_DOLLAR: single-quoted here-string stays silent", () => {
+  const r = fix("Set-Content -Path a.txt -Value @'\nHello $name\n'@", WIN51);
+  assert.ok(!r.warnings.some((w) => w.rule === "HERESTRING_DOLLAR"));
+});
